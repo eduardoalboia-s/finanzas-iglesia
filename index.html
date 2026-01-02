@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanzas Iglesia</title>
+    <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+    <div class="contenedor">
+        <h1>Sistema de Gestión Financiera</h1>
+        <h2>Iglesia Evangélica</h2>
+        
+        <div class="seccion">
+            <h3>Registrar Ingreso</h3>
+            <input type="text" id="descripcionIngreso" placeholder="Descripción (ej: Ofrenda domingo)">
+            <input type="number" id="montoIngreso" placeholder="Monto">
+            <button onclick="agregarIngreso()">Agregar Ingreso</button>
+        </div>
+
+        <div class="seccion">
+            <h3>Registrar Gasto</h3>
+            <input type="text" id="descripcionGasto" placeholder="Descripción (ej: Luz)">
+            <input type="number" id="montoGasto" placeholder="Monto">
+            <button onclick="agregarGasto()">Agregar Gasto</button>
+        </div>
+
+        <div class="seccion">
+            <h3>Resumen</h3>
+            <p>Total Ingresos: $<span id="totalIngresos">0</span></p>
+            <p>Total Gastos: $<span id="totalGastos">0</span></p>
+            <p><strong>Balance: $<span id="balance">0</span></strong></p>
+        </div>
+
+        <div class="seccion">
+            <h3>Historial</h3>
+            <div id="listaTransacciones"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
