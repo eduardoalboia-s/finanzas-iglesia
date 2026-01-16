@@ -1,0 +1,256 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================
+// Modelo de Multi-tenancy (Iglesias)
+// =========================================================
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  address     String?
+  phone       String?
+  email       String?
+  rut         String?  // RUT de la Iglesia (Persona Jurídica)
+  logoUrl     String?  // URL del logo de la iglesia
+  
+  // Autoridades
+  pastorName     String?
+  treasurerName  String?
+  
+  // Configuración
+  ministries     String?  // JSON stringified: ["Jóvenes", "Damas", "Varones"]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  users       User[]
+  members     Member[]
+  memberGroups MemberGroup[]
+  accounts    Account[]
+  budgets     Budget[]
+  assets      Asset[]
+  events      Event[]
+}
+
+// =========================================================
+// Usuarios del Sistema (Pastores, Tesoreros, etc.)
+// =========================================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  password  String   // Hashed password
+  role      String   @default("DONOR") // ADMIN, PASTOR, TREASURER, AUDITOR, DONOR
+  rut       String?
+  phone     String?
+  
+  // Password Recovery
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  
+  // Estado de aprobación
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+
+  // Tenant FK (Iglesia a la que pertenece)
+  tenantId  String?
+  tenant    Tenant?   @relation(fields: [tenantId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+// =========================================================
+// Miembros de la Iglesia (Feligreses)
+// =========================================================
+
+model Member {
+  id          String   @id @default(uuid())
+  firstName   String
+  lastName    String
+  rut         String?  // RUT Personal (Módulo 11)
+  email       String?
+  phone       String?
+  profession  String?
+  maritalStatus String?
+  address     String?
+  birthDate   DateTime?
+  baptismDate    DateTime?
+  conversionDate DateTime?
+  notes          String?  @db.Text
+  status      String   @default("ACTIVE") // ACTIVE, PASSIVE, DISCIPLINE
+  
+  // Tenant FK
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  // Relaciones
+  groups      MemberGroup[] // Relación N:M
+
+  // Relaciones Financieras
+  transactions Transaction[]
+  assets      Asset[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MemberGroup {
+  id          String   @id @default(uuid())
+  name        String   // Ej: "Jóvenes", "Líderes"
+  description String?
+  
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  members     Member[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// =========================================================
+// Finanzas: Cuentas y Movimientos
+// =========================================================
+
+model Account {
+  id          String   @id @default(uuid())
+  name        String   // Ej: "Caja Chica", "Banco Estado"
+  type        String   // CASH, BANK
+  currency    String   @default("CLP")
+  
+  // Tenant FK
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  transactions Transaction[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  amount      Int      // Siempre enteros para CLP
+  type        String   // INCOME, EXPENSE
+  category    String   // Ej: "Diezmo", "Luz", "Ofrenda"
+  description String?
+  attachmentUrl String? // URL del comprobante/voucher
+  receiptNumber Int? // Número de recibo consecutivo
+  date        DateTime @default(now())
+  
+  // Relaciones
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id])
+  
+  memberId    String?  // Opcional (Ej: Ofrenda anónima es null)
+  member      Member?  @relation(fields: [memberId], references: [id])
+  
+  // Audit (Quién creó esto)
+  createdById String?
+
+  // Conciliación Bancaria
+  isReconciled   Boolean   @default(false)
+  reconciledDate DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Budget {
+  id          String   @id @default(uuid())
+  category    String   // Ej: "SERVICIOS_BASICOS", "MINISTERIOS"
+  amount      Int      // Monto presupuestado
+  year        Int
+  month       Int?     // Opcional: Si es null, es presupuesto anual. Si tiene valor (1-12), es mensual.
+  
+  // Tenant FK
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, year, month, category])
+}
+
+// =========================================================
+// Auditoría y Seguridad
+// =========================================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // CREATE, UPDATE, DELETE
+  entity      String   // Member, Transaction, etc.
+  entityId    String
+  details     String?  // JSON stringified con cambios
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
+
+// =========================================================
+// Inventario y Activos Fijos
+// =========================================================
+
+model Asset {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  category    String   // Muebles, Electrónica, Instrumentos, Inmuebles, Vehículos, Otros
+  acquisitionDate DateTime?
+  cost        Int?     // Valor de compra
+  currentValue Int?    // Valor actual estimado
+  location    String?  // Templo, Oficina Pastoral, Bodega, etc.
+  status      String   @default("ACTIVE") // ACTIVE, DAMAGED, LOST, SOLD, DISCARDED
+  serialNumber String?
+  
+  // Responsable (Miembro a cargo)
+  responsibleId String?
+  responsible   Member?  @relation(fields: [responsibleId], references: [id])
+  
+  // Tenant FK
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// =========================================================
+// Calendario y Eventos
+// =========================================================
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  location    String?
+  
+  // Tenant FK
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
